@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { runAgent } from '@/lib/ai/agent';
-import { getMemory, setMemory } from '@/lib/ai/memory';
+import { runAgentStream } from '@/lib/ai/agent';
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -16,17 +15,15 @@ export async function POST(request: NextRequest) {
   const parsed = ChatRequestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
+    return Response.json(
+      { error: 'Invalid request', details: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
 
-  const { message, sessionId, history } = parsed.data;
-  const memory = getMemory(sessionId);
+  const stream = runAgentStream(parsed.data);
 
-  const response = await runAgent({ message, sessionId, history });
-
-  if (response.intent) {
-    setMemory(sessionId, { lastIntent: response.intent });
-  }
-
-  return NextResponse.json(response);
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }

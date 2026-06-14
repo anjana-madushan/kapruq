@@ -6,6 +6,8 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
+  if (!message.content && message.role === 'assistant') return null;
+
   const isUser = message.role === 'user';
 
   return (

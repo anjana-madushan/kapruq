@@ -1,10 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import axios from 'axios';
 import type { Message } from '@/types/chat';
-import type { Product } from '@/types/product';
-import type { ChatRequest, ChatApiResponse } from '@/types/api';
 
 export function useChat(sessionId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,24 +18,49 @@ export function useChat(sessionId: string) {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    const assistantId = crypto.randomUUID();
+
     try {
-      const payload: ChatRequest = {
-        message: content,
-        sessionId,
-        history: messages.map((m) => ({ role: m.role, content: m.content })),
-      };
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: content,
+          sessionId,
+          history: messages.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
 
-      const { data } = await axios.post<ChatApiResponse>('/api/chat', payload);
+      if (!response.ok) throw new Error('Chat request failed');
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.message,
-        timestamp: new Date(),
-        products: data.products,
-      };
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: 'assistant', content: '', timestamp: new Date() },
+      ]);
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let firstChunk = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        if (firstChunk) {
+          setIsLoading(false);
+          firstChunk = false;
+        }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: m.content + chunk } : m
+          )
+        );
+      }
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== assistantId));
     } finally {
       setIsLoading(false);
     }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getDeliveryQuote } from '@/lib/mcp/delivery';
+import { checkDelivery } from '@/lib/mcp/delivery';
 
 const Schema = z.object({
-  productIds: z.array(z.string()).min(1),
-  address: z.string().min(1),
+  city: z.string().min(1),
+  delivery_date: z.string().optional(),
+  product_id: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
-  const quote = await getDeliveryQuote(parsed.data);
-  return NextResponse.json(quote);
+  const { city, delivery_date, product_id } = parsed.data;
+  const result = await checkDelivery(city, delivery_date, product_id);
+  return NextResponse.json(result);
 }
