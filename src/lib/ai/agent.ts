@@ -183,7 +183,19 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
 }
 
 // ---------------------------------------------------------------------------
-// Agentic loop — streams response, handles tool calls transparently
+// SSE helpers
+// ---------------------------------------------------------------------------
+
+function sseText(encoder: TextEncoder, content: string): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify({ type: 'text', content })}\n\n`);
+}
+
+function sseProducts(encoder: TextEncoder, items: unknown[]): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify({ type: 'products', items })}\n\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Agentic loop — streams SSE events; emits products when search tool runs
 // ---------------------------------------------------------------------------
 
 function buildMessages(request: ChatRequest): OpenAI.Chat.ChatCompletionMessageParam[] {
@@ -205,7 +217,6 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
       try {
         const messages = buildMessages(request);
 
-        // First streaming call — OpenAI may stream text OR request tool calls
         const stream1 = await openai.chat.completions.create({
           model: MODEL,
           messages,
@@ -214,7 +225,6 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
           stream: true,
         });
 
-        // Accumulate tool call fragments across stream chunks
         const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
         let assistantContent = '';
         let finishReason: string | null = null;
@@ -225,7 +235,7 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
 
           if (delta?.content) {
             assistantContent += delta.content;
-            controller.enqueue(encoder.encode(delta.content));
+            controller.enqueue(sseText(encoder, delta.content));
           }
 
           for (const tc of delta?.tool_calls ?? []) {
@@ -238,13 +248,11 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
           }
         }
 
-        // No tool calls — we're done
         if (finishReason !== 'tool_calls' || toolCallMap.size === 0) {
           controller.close();
           return;
         }
 
-        // Execute all tool calls in parallel
         const toolCalls = [...toolCallMap.entries()]
           .sort(([a], [b]) => a - b)
           .map(([, tc]) => ({
@@ -261,7 +269,20 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
           })
         );
 
-        // Second call — stream the final response incorporating tool results
+        // Emit products from any search tool call
+        for (let i = 0; i < toolCalls.length; i++) {
+          if (toolCalls[i].function.name === 'kapruka_search_products') {
+            try {
+              const parsed = JSON.parse(toolResults[i].content) as { results?: unknown[] };
+              if (parsed.results?.length) {
+                controller.enqueue(sseProducts(encoder, parsed.results));
+              }
+            } catch {
+              // not JSON — skip
+            }
+          }
+        }
+
         const stream2 = await openai.chat.completions.create({
           model: MODEL,
           messages: [
@@ -278,13 +299,13 @@ export function runAgentStream(request: ChatRequest): ReadableStream<Uint8Array>
 
         for await (const chunk of stream2) {
           const text = chunk.choices[0]?.delta?.content ?? '';
-          if (text) controller.enqueue(encoder.encode(text));
+          if (text) controller.enqueue(sseText(encoder, text));
         }
 
         controller.close();
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Something went wrong.';
-        controller.enqueue(encoder.encode(`Sorry, I ran into an issue: ${msg}`));
+        controller.enqueue(sseText(encoder, `Sorry, I ran into an issue: ${msg}`));
         controller.close();
       }
     },

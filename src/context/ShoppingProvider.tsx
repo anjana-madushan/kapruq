@@ -11,8 +11,8 @@ export function ShoppingProvider({ children }: { children: React.ReactNode }) {
   const { session } = useSession();
   const sessionId = session?.id ?? '';
 
-  const { messages, isLoading, sendMessage } = useChat(sessionId);
   const { products, isSearching, setProducts } = useProducts();
+  const { messages, isLoading, sendMessage } = useChat(sessionId, setProducts);
   const { cart, addToCart, removeFromCart, updateQuantity, clearCart } = useCart();
   const [isCartOpen, setCartOpen] = useState(false);
 

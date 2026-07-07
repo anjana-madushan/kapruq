@@ -24,6 +24,6 @@ export async function POST(request: NextRequest) {
   const stream = runAgentStream(parsed.data);
 
   return new Response(stream, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
   });
 }
