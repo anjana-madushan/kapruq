@@ -175,8 +175,12 @@ const KAPRUKA_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
 // ---------------------------------------------------------------------------
 
 async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
+  const enriched =
+    name === 'kapruka_search_products' || name === 'kapruka_get_product'
+      ? { ...args, response_format: 'json' }
+      : args;
   try {
-    return await callTool(name, { params: args });
+    return await callTool(name, { params: enriched });
   } catch (err) {
     return `Error calling ${name}: ${err instanceof Error ? err.message : 'Unknown error'}`;
   }
