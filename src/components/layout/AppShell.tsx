@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
 import ChatPanel from '@/components/chat/ChatPanel';
-import ProductPanel from '@/components/products/ProductPanel';
+import ProductStrip from '@/components/products/ProductStrip';
 import CartPanel from '@/components/cart/CartPanel';
 import { useShoppingContext } from '@/context/ShoppingContext';
 import type { ProductCategory } from '@/types/product';
@@ -37,9 +37,9 @@ export default function AppShell() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar activeCategory={activeCategory} onSelectCategory={handleSelectCategory} />
 
-        <main className="flex flex-1 overflow-hidden">
+        <main className="flex flex-1 flex-col overflow-hidden">
           <ChatPanel />
-          <ProductPanel />
+          <ProductStrip />
         </main>
       </div>
 
